@@ -37,7 +37,7 @@ def local_minima(array2d):
             (array2d <= np.roll(array2d,  1, 1)) &
             (array2d <= np.roll(array2d, -1, 1)))
 
-def estimate_nc(alpha, beta, gamma, include_ho=True, based_on='energy'):
+def estimate_nc(alpha, beta, gamma, include_ho=True, based_on='energy', verbose=True):
     # Critical atom number is the number of atoms for which the energy of a system crosses zero.
     # The energy of a system is given by the second element of the tuple returned by en_particles.
     # The first element of the tuple is the optimal x_0.
@@ -96,7 +96,8 @@ def estimate_nc(alpha, beta, gamma, include_ho=True, based_on='energy'):
                 # print the sr and sz values for the local minima
                 sr_local_min = sr.flatten()[local_min.flatten()]
                 sz_local_min = sz.flatten()[local_min.flatten()]
-                print(f"nparticles: {nparticles}, sr_local_min: {sr_local_min}, sz_local_min: {sz_local_min}")
+                if verbose:
+                    print(f"nparticles: {nparticles}, sr_local_min: {sr_local_min}, sz_local_min: {sz_local_min}")
                 
                 if np.min(en_0) > 0 and (np.min(sr_local_min) > sr_range[-2] or np.min(sz_local_min) > sz_range[-2]):
                     break
