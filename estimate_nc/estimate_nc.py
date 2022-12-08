@@ -37,7 +37,7 @@ def local_minima(array2d):
             (array2d <= np.roll(array2d,  1, 1)) &
             (array2d <= np.roll(array2d, -1, 1)))
 
-def estimate_nc(alpha, beta, gamma, include_ho=True, based_on='energy', verbose=True):
+def estimate_nc(alpha, beta, gamma, include_ho=True, based_on='energy', verbose=False):
     # Critical atom number is the number of atoms for which the energy of a system crosses zero.
     # The energy of a system is given by the second element of the tuple returned by en_particles.
     # The first element of the tuple is the optimal x_0.
@@ -75,7 +75,7 @@ def estimate_nc(alpha, beta, gamma, include_ho=True, based_on='energy', verbose=
         return nparticles, en_0
         
     if based_on == 'size':
-        ng = 500
+        ng = 300
         sr_range = np.linspace(0.1, 200, ng)
         sz_range = np.linspace(0.1, 2000, ng)
         # make meshgrid
@@ -90,7 +90,7 @@ def estimate_nc(alpha, beta, gamma, include_ho=True, based_on='energy', verbose=
             
             # if there exists local minimum, decrease the number of atoms. If not, break the loop
             if np.sum(local_min) > 0:
-                nparticles_new = nparticles * 0.95
+                nparticles_new = nparticles * 0.9
                 nparticles = nparticles_new
                 
                 # print the sr and sz values for the local minima
