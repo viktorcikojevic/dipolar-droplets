@@ -115,3 +115,25 @@ def estimate_nc(alpha, beta, gamma, include_ho=True, based_on='energy', verbose=
 
         nc = nparticles
         return nc, np.min(en_0)
+    
+    
+def get_optimal_sr_sz(alpha, beta, gamma, nparticles):
+    ng = 500
+    sr_range = np.linspace(4, 200, ng)
+    sz_range = np.linspace(4, 2000, ng)
+    # make meshgrid
+    sr, sz = np.meshgrid(sr_range, sz_range)
+
+    # Calculate energy for each sr and sz
+    en_0 = en_per_particle(sr, sz, nparticles, alpha, beta, gamma, include_ho=False)
+    
+    # Find the local minima
+    local_min = local_minima(en_0)
+
+    # Get the sr and sz values for the local minima
+    sr_local_min = sr.flatten()[local_min.flatten()][0]
+    sz_local_min = sz.flatten()[local_min.flatten()][0]
+    en_0 = en_per_particle(sr_local_min, sz_local_min, nparticles, alpha, beta, gamma, include_ho=False)
+    
+    # return the optimal sr and sz
+    return {"sr": sr_local_min, "sz": sz_local_min, "en_0": en_0}
