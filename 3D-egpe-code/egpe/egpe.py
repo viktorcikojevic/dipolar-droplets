@@ -8,7 +8,7 @@ import os
 import time
 from tqdm import tqdm
 import argparse
-
+from scipy.special import j0
 
 class eGPE:
 
@@ -16,6 +16,8 @@ class eGPE:
                  nparticles,
                  nxyz=[32, 32, 32],
                  box_size=[200, 200, 2000],
+                 rho_cutoff=None,
+                 z_cutoff=None,
                  eps_dd=None,
                  a_s=None,
                  psi_0=None,
@@ -35,6 +37,8 @@ class eGPE:
             nxyz (list): number of grid points in each direction
             box_size (list): size of the simulation box in each direction, in units of r_0 = 387.7 a_0 (obtained from https://www.wolframalpha.com/input?i=%28162+atomic+mass+unit%29+*+%28mu_0%29+*+%289.93+bohr+magneton%29%5E2+%2F+%284+pi+hbar%5E2%29+%2F+%28bohr+radius%29)
             eps_dd (float): interaction strength, dimensionless, equal to 1. / 3 / (self.a_s / self.r_0)
+            rho_cutoff (float): cutoff for the dipolar potential in rho-direction, in units of r_0
+            z_cutoff (float): cutoff for the dipolar potential in z-direction, in units of r_0
             a_s (float): interaction strength, in units of Bohr radius.
             psi_0 (np.array): initial wavefunction
             fx (float): frequency of the oscillator in the x direction, units of Hz
@@ -112,7 +116,8 @@ class eGPE:
         
         self.contact_interaction = contact_interaction
         self.dipolar_interaction = dipolar_interaction
-
+        self.rho_cutoff = rho_cutoff
+        self.z_cutoff = z_cutoff
        
 
         # Set harmonic oscillator parameters
@@ -166,20 +171,18 @@ class eGPE:
         self.kx = np.fft.fftfreq(self.nx, self.dx / (2 * np.pi))
         self.ky = np.fft.fftfreq(self.ny, self.dy / (2 * np.pi))
         self.kz = np.fft.fftfreq(self.nz, self.dz / (2 * np.pi))
-        self.kx, self.ky, self.kz = np.meshgrid(
-            self.kx, self.ky, self.kz, indexing='ij')
+        self.kx, self.ky, self.kz = np.meshgrid(self.kx, self.ky, self.kz, indexing='ij')
         self.KSquared = self.kx**2 + self.ky**2 + self.kz**2
-        self.KSquared[self.KSquared == 0] = 1e-10
+        self.KSquared[self.KSquared == 0] = 1e-20
         self.KVec = np.sqrt(self.KSquared)
 
-        # Set dipolar interaction parameters
-        if self.dipolar_interaction == True:
-            self.ft_dip = 4*np.pi/3 * \
-                (2*self.kz**2 - self.kx**2 - self.ky**2) / self.KVec**2
-            self.ft_dip = np.nan_to_num(self.ft_dip, posinf=0)
-        else:
-            self.ft_dip = 0.
+        if self.rho_cutoff is not None and self.z_cutoff is not None and self.dipolar_interaction == True: 
+            self.set_dipolar_potential(set_cilindrical_cutoff=True)
             
+        if self.rho_cutoff is None and self.z_cutoff is None and self.dipolar_interaction == True: 
+            self.set_dipolar_potential(set_cilindrical_cutoff=False)
+        
+        
             
         # set the external potential
         self.set_external_potential()
@@ -218,6 +221,78 @@ class eGPE:
         return 0.5 * ((self.x/self.a_ho[0])**2/self.a_ho[0]**2
                       + (self.y/self.a_ho[1])**2/self.a_ho[1]**2
                       + (self.z/self.a_ho[2])**2/self.a_ho[2]**2)
+
+    def set_dipolar_potential(self, set_cilindrical_cutoff=False):
+        
+        if set_cilindrical_cutoff == False and self.dipolar_interaction == True:
+            self.ft_dip = 4*np.pi/3 * (2*self.kz**2 - self.kx**2 - self.ky**2) / self.KVec**2
+            return
+        
+        if self.dipolar_interaction == False:
+            self.ft_dip = 0.
+            return
+        
+        if self.rho_cutoff is None or self.z_cutoff is None:
+            raise ValueError("Values of rho_cutoff and z_cutoff must be set!")
+        
+        # self.rho_cutoff is in units of box_size[0], self.z_cutoff is in units of box_size[2]
+        self.rho_cutoff = self.z_cutoff * self.box_size[0] / 2
+        self.z_cutoff = self.z_cutoff * self.box_size[2] / 2
+        
+        
+        # Both self.rho_cutoff and self.z_cutoff are in units of r_0.
+        
+        
+        
+        C_dd = 4*np.pi
+        cos_alpha = self.kz / self.KVec
+        sin_alpha = np.sqrt(1 - cos_alpha**2)
+        k_rho = np.sqrt(self.kx**2 + self.ky**2)
+        
+        
+        
+        # First part
+        self.ft_dip = C_dd/3 * (3*cos_alpha**2 - 1)
+        
+    
+        
+        # Second part
+        self.ft_dip += C_dd * np.exp(-self.z_cutoff * k_rho) * (sin_alpha**2 * np.cos(self.z_cutoff * self.kz) - sin_alpha * cos_alpha * np.sin(self.z_cutoff * self.kz))
+        
+        
+        
+        
+        # Third part
+        third_part = np.zeros_like(self.ft_dip)
+        
+        # Loop over all the k vectors
+        print('Calculating integral part of dipolar potential...')
+        
+        nbins_for_integral = 128
+        
+        # 55.218 for 64
+        # 55.385 for 128
+        # 55.467 for 256
+        # 55.507 for 512
+        
+        z = np.linspace(0., self.z_cutoff, nbins_for_integral, endpoint=True)
+        rho = np.linspace(self.rho_cutoff, self.rho_cutoff*40, nbins_for_integral, endpoint=True)
+        drho = rho[1] - rho[0]
+        dz = z[1] - z[0]
+        rho, z = np.meshgrid(rho, z, indexing='ij')
+        
+        for i in tqdm(range(self.nx)):
+            for j in range(self.ny):
+                for k in range(self.nz):
+                    integrand = rho * np.cos(self.kz[i,j,k] * z) * (rho**2 - 2*z**2)/(rho**2 + z**2)**(5./2) * j0(k_rho[i,j,k] * rho)
+                    third_part[i,j,k] = np.sum(integrand * drho * dz)
+        
+        self.ft_dip -= C_dd * third_part
+        
+        
+        
+        
+        self.ft_dip = np.nan_to_num(self.ft_dip, posinf=0)
 
     def set_external_potential(self):
         """
