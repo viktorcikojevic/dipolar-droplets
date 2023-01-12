@@ -9,11 +9,13 @@ import time
 from tqdm import tqdm
 import argparse
 from scipy.special import j0
+import pickle
+
 
 class eGPE:
 
     def __init__(self,
-                 nparticles,
+                 nparticles=None,
                  nxyz=[32, 32, 32],
                  box_size=[200, 200, 2000],
                  rho_cutoff=None,
@@ -29,7 +31,7 @@ class eGPE:
                  gamma=None,
                  contact_interaction=True,
                  dipolar_interaction=True,
-                 verbose=False,):
+                 verbose=False):
         """
         Initializes a DFT simulation of the Gross-Pitaevskii equation for a 3D BEC.
         Args:
@@ -51,14 +53,16 @@ class eGPE:
             dipolar_interaction (bool): include dipolar interaction in the simulation
             output_dir (str): path to the output directory
             verbose (bool): print additional information
-        Returns:
-            psi (np.array): wavefunction at the end of the simulation
         """
         
         # Set constants
-        self.r_0 = 387.654009
+        # self.r_0 = 387.654009
         # (162 atomic mass unit) * (mu_0) * (9.93 bohr magneton)^2 / (4 pi hbar^2) / (bohr radius)
         # = (162 * 1.66053907e-27 kilograms) * (1.25663706e-6 m kg s^-2 A^-2) * (9.93 * 9.2740100783E-24 J/T)^2 / (4 pi (1.05457182e-34 m^2 kg / s)^2) / (5.291772109E-11 m)
+        
+        # In the "Supersolid symmetry breaking from compressional oscillations in a dipolar quantum gas" paper, the authors use 390 a_0 as the value for r_0.
+        self.r_0 = 390.
+        
         
         # User can set either eps_dd or a_s, but not both.
         # If eps_dd is set, a_s is calculated from it.
@@ -139,7 +143,7 @@ class eGPE:
 
         # Set initial wavefunction
         if psi_0 is None:
-            print("[INFO] Initializing psi")
+            print("[INFO] Initializing random psi")
             self.set_random_psi()
         else:
             self.psi = psi_0
@@ -187,7 +191,12 @@ class eGPE:
         # set the external potential
         self.set_external_potential()
 
-    def load_egpe(self, filename):
+    def save(self, output_dir):
+        print("Saving gp object to gp.pickle")
+        with open(f'{output_dir}/gp.pickle', 'wb') as f:
+            pickle.dump(self, f)
+
+    def load(self, filename):
         """
         Loads the egpe object from a file.
         """
@@ -396,7 +405,7 @@ class eGPE:
                time_prop="imag",
                verbose=False,
                print_each_percent=5,
-               output_dir="./"):
+               output_root_dir="./"):
         """
         Evolution of the wavefunction.
         Args:
@@ -404,7 +413,7 @@ class eGPE:
             t_max (float): maximum simulation time, units of m_162u * r_0^2 / hbar
             time_prop (str): propagation of time. "real" or "imag"
             verbose (bool): print additional information
-            output_dir (str): path to the output directory
+            output_root_dir (str): path to the output directory
         Returns:
             psi (np.array): wavefunction at the end of the simulation
         """
@@ -413,6 +422,21 @@ class eGPE:
         n_sim_steps = int(t_max // dt)
         print_each = int(n_sim_steps * print_each_percent/ 100)
         
+        output_dir = f'{output_root_dir}/snapshots_time_evolution_0'
+        num=0
+        while os.path.exists(output_dir): 
+            num+=1
+            output_dir=f'{output_root_dir}/snapshots_time_evolution_{num}'
+        if not os.path.exists(output_dir): 
+            os.makedirs(output_dir)
+
+        print("[INFO] Created output directory: ", output_dir)
+        # open a file to save the energy
+        energy_file = open(f"{output_dir}/energy.txt", "w")
+        energy_file.write(f'# step total_en kin_en pot_ext pot_int\n')
+        # make dir output_dir/densities
+        if not os.path.exists(f"{output_dir}/densities"):
+            os.makedirs(f"{output_dir}/densities")
 
         # determine the timestep
         if time_prop == "real":
@@ -435,23 +459,64 @@ class eGPE:
                 total_en = en["kinetic"] + en["pot_ext"] + en["pot_int"]
                 # print kinetic, potential, total energy
                 print("Kinetic energy: ", en["kinetic"])
-                print("Potential energy: ", en["pot_ext"] + en["pot_int"])
+                print("Potential energy (external): ",  en["pot_ext"] )
+                print("Potential energy (interaction): ",  en["pot_int"])
                 print("Total energy: ", total_en)
-            
-            
-            if i % 500 == 0:
-                en = self.energy_contributions()
-                total_en = en["kinetic"] + en["pot_ext"] + en["pot_int"]
                 
-                # if total_en and en_0 are very close, stop the simulation
-                if np.abs(total_en - en_0) < 1e-4:
-                    print("Total energy converged")
-                    return
+                # save energy to output_dir/energy.txt
+                energy_file.write(f'{i} {total_en} {en["kinetic"]} {en["pot_ext"]} {en["pot_int"]}\n')
+                # flush
+                energy_file.flush()
                 
-                en_0 = total_en
+                # Save coordinate and its slices
+                x, den_x = self.coordinate_slice(axis="x"), self.density_slice(axis="x")
+                y, den_y = self.coordinate_slice(axis="y"), self.density_slice(axis="y")
+                z, den_z = self.coordinate_slice(axis="z"), self.density_slice(axis="z")
                 
+                percentage_over = i // print_each
                 
+                np.save(f"{output_dir}/densities/x_{percentage_over}", x)
+                np.save(f"{output_dir}/densities/y_{percentage_over}", y)
+                np.save(f"{output_dir}/densities/z_{percentage_over}", z)
 
+                np.save(f"{output_dir}/densities/den_x_{percentage_over}", den_x)
+                np.save(f"{output_dir}/densities/den_y_{percentage_over}", den_y)
+                np.save(f"{output_dir}/densities/den_z_{percentage_over}", den_z)
+                
+            
+
+                
+                
+    def density_slice(self, axis="x"):
+        """
+        Returns a slice of the density.
+        Args:
+            axis (str): axis of the slice
+        Returns:
+            density_slice (np.array): slice of the density
+        """
+        if axis == "x":
+            return self.den[:, self.ny // 2, self.nz // 2]
+        elif axis == "y":
+            return self.den[self.nx // 2, :, self.nz // 2]
+        elif axis == "z":
+            return self.den[self.nx // 2, self.ny // 2, :]
+
+    def coordinate_slice(self, axis="x"):
+        """
+        Returns a slice of the density.
+        Args:
+            axis (str): axis of the slice
+        Returns:
+            density_slice (np.array): slice of the density
+        """
+        if axis == "x":
+            return self.x[:, self.ny // 2, self.nz // 2]
+        elif axis == "y":
+            return self.y[self.nx // 2, :, self.nz // 2]
+        elif axis == "z":
+            return self.z[self.nx // 2, self.ny // 2, :]
+    
 
     def get_avg_abs_x(self):
         """
