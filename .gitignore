@@ -2,3 +2,5 @@ __MACOSX*
 *DS_Store*
 *.pyc*
 *snapshots_time_evolution*
+Untitled*
+*gp.pickle*

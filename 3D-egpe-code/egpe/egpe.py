@@ -68,6 +68,10 @@ class eGPE:
         # If eps_dd is set, a_s is calculated from it.
         # if a_s is set, eps_dd is calculated from it.
         
+        # if both eps_dd and a_s is none, return
+        if eps_dd is None and a_s is None:
+            return
+        
         if eps_dd is not None and a_s is not None:
             raise ValueError("Cannot set both eps_dd and a_s. Please set only one.")
         elif eps_dd is not None:
@@ -244,9 +248,7 @@ class eGPE:
         if self.rho_cutoff is None or self.z_cutoff is None:
             raise ValueError("Values of rho_cutoff and z_cutoff must be set!")
         
-        # self.rho_cutoff is in units of box_size[0], self.z_cutoff is in units of box_size[2]
-        self.rho_cutoff = self.z_cutoff * self.box_size[0] / 2
-        self.z_cutoff = self.z_cutoff * self.box_size[2] / 2
+        
         
         
         # Both self.rho_cutoff and self.z_cutoff are in units of r_0.
@@ -454,14 +456,15 @@ class eGPE:
         for i in tqdm(range(n_sim_steps)):
             self.T2_operator()
 
-            if verbose and i % print_each == 0:
+            if i % print_each == 0:
                 en = self.energy_contributions()
                 total_en = en["kinetic"] + en["pot_ext"] + en["pot_int"]
                 # print kinetic, potential, total energy
-                print("Kinetic energy: ", en["kinetic"])
-                print("Potential energy (external): ",  en["pot_ext"] )
-                print("Potential energy (interaction): ",  en["pot_int"])
-                print("Total energy: ", total_en)
+                if verbose:
+                    print("Kinetic energy: ", en["kinetic"])
+                    print("Potential energy (external): ",  en["pot_ext"] )
+                    print("Potential energy (interaction): ",  en["pot_int"])
+                    print("Total energy: ", total_en)
                 
                 # save energy to output_dir/energy.txt
                 energy_file.write(f'{i} {total_en} {en["kinetic"]} {en["pot_ext"]} {en["pot_int"]}\n')
