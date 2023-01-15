@@ -120,7 +120,7 @@ def estimate_nc(alpha, beta, gamma, include_ho=True, based_on='energy', verbose=
 def get_optimal_sr_sz(alpha, beta, gamma, nparticles):
     ng = 500
     sr_range = np.linspace(4, 200, ng)
-    sz_range = np.linspace(4, 2000, ng)
+    sz_range = np.linspace(4, 3000, ng)
     # make meshgrid
     sr, sz = np.meshgrid(sr_range, sz_range)
 

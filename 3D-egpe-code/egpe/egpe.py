@@ -13,9 +13,32 @@ import pickle
 
 
 class eGPE:
+    
+    def set_default_values(self):
+        """
+        Set default values for the simulation parameters
+        """
+        self.nparticles = 1
+        self.nxyz = [32, 32, 32]
+        self.box_size = [200, 200, 2000]
+        self.rho_cutoff = None
+        self.z_cutoff = None
+        self.eps_dd = None
+        self.a_s = None
+        self.psi_0 = None
+        self.fx = None
+        self.fy = None
+        self.fz = None
+        self.lambda_pot_external = 0
+        self.beta = None
+        self.gamma = None
+        self.contact_interaction = True
+        self.dipolar_interaction = True
+        self.verbose = False
+        self.a_ho = np.array([1,1,1])
 
     def __init__(self,
-                 nparticles=None,
+                 nparticles=1,
                  nxyz=[32, 32, 32],
                  box_size=[200, 200, 2000],
                  rho_cutoff=None,
@@ -70,6 +93,7 @@ class eGPE:
         
         # if both eps_dd and a_s is none, return
         if eps_dd is None and a_s is None:
+            self.set_default_values()
             return
         
         if eps_dd is not None and a_s is not None:
@@ -173,8 +197,7 @@ class eGPE:
         self.y = np.linspace(-self.Ly/2, self.Ly/2, self.ny, endpoint=False)
         self.z = np.linspace(-self.Lz/2, self.Lz/2, self.nz, endpoint=False)
 
-        self.x, self.y, self.z = np.meshgrid(
-            self.x, self.y, self.z, indexing='ij')
+        self.x, self.y, self.z = np.meshgrid(self.x, self.y, self.z, indexing='ij')
 
         self.kx = np.fft.fftfreq(self.nx, self.dx / (2 * np.pi))
         self.ky = np.fft.fftfreq(self.ny, self.dy / (2 * np.pi))
@@ -309,8 +332,7 @@ class eGPE:
         """
         Sets the external potential.
         """
-        self.VExt = self.potential_external()
-        + self.lambda_pot_external * (self.x/self.a_ho[0])**2/self.a_ho[0]**2
+        self.VExt = self.potential_external() + self.lambda_pot_external * (self.x/self.a_ho[0])**2/self.a_ho[0]**2
 
     def get_phi_dd(self):
         """
@@ -407,7 +429,7 @@ class eGPE:
                time_prop="imag",
                verbose=False,
                print_each_percent=5,
-               output_root_dir="./"):
+               output_root_dir=None):
         """
         Evolution of the wavefunction.
         Args:
@@ -421,24 +443,25 @@ class eGPE:
         """
 
         # set number of time steps
-        n_sim_steps = int(t_max // dt)
+        n_sim_steps = int(t_max / dt)
         print_each = int(n_sim_steps * print_each_percent/ 100)
         
-        output_dir = f'{output_root_dir}/snapshots_time_evolution_0'
-        num=0
-        while os.path.exists(output_dir): 
-            num+=1
-            output_dir=f'{output_root_dir}/snapshots_time_evolution_{num}'
-        if not os.path.exists(output_dir): 
-            os.makedirs(output_dir)
+        if output_root_dir is not None:
+            output_dir = f'{output_root_dir}/snapshots_time_evolution_0'
+            num=0
+            while os.path.exists(output_dir): 
+                num+=1
+                output_dir=f'{output_root_dir}/snapshots_time_evolution_{num}'
+            if not os.path.exists(output_dir): 
+                os.makedirs(output_dir)
 
-        print("[INFO] Created output directory: ", output_dir)
-        # open a file to save the energy
-        energy_file = open(f"{output_dir}/energy.txt", "w")
-        energy_file.write(f'# step total_en kin_en pot_ext pot_int\n')
-        # make dir output_dir/densities
-        if not os.path.exists(f"{output_dir}/densities"):
-            os.makedirs(f"{output_dir}/densities")
+            print("[INFO] Created output directory: ", output_dir)
+            # open a file to save the energy
+            energy_file = open(f"{output_dir}/energy.txt", "w")
+            energy_file.write(f'# step total_en kin_en pot_ext pot_int\n')
+            # make dir output_dir/densities
+            if not os.path.exists(f"{output_dir}/densities"):
+                os.makedirs(f"{output_dir}/densities")
 
         # determine the timestep
         if time_prop == "real":
@@ -454,9 +477,8 @@ class eGPE:
         en_0 = np.inf
         # Loop over time steps and apply the T2 operator
         for i in tqdm(range(n_sim_steps)):
-            self.T2_operator()
-
-            if i % print_each == 0:
+            
+            if i % print_each == 0 or i == 0:
                 en = self.energy_contributions()
                 total_en = en["kinetic"] + en["pot_ext"] + en["pot_int"]
                 # print kinetic, potential, total energy
@@ -466,26 +488,28 @@ class eGPE:
                     print("Potential energy (interaction): ",  en["pot_int"])
                     print("Total energy: ", total_en)
                 
-                # save energy to output_dir/energy.txt
-                energy_file.write(f'{i} {total_en} {en["kinetic"]} {en["pot_ext"]} {en["pot_int"]}\n')
-                # flush
-                energy_file.flush()
-                
-                # Save coordinate and its slices
-                x, den_x = self.coordinate_slice(axis="x"), self.density_slice(axis="x")
-                y, den_y = self.coordinate_slice(axis="y"), self.density_slice(axis="y")
-                z, den_z = self.coordinate_slice(axis="z"), self.density_slice(axis="z")
-                
-                percentage_over = i // print_each
-                
-                np.save(f"{output_dir}/densities/x_{percentage_over}", x)
-                np.save(f"{output_dir}/densities/y_{percentage_over}", y)
-                np.save(f"{output_dir}/densities/z_{percentage_over}", z)
+                if output_root_dir is not None:
+                    # save energy to output_dir/energy.txt
+                    energy_file.write(f'{i} {total_en} {en["kinetic"]} {en["pot_ext"]} {en["pot_int"]}\n')
+                    # flush
+                    energy_file.flush()
+                    
+                    # Save coordinate and its slices
+                    x, den_x = self.coordinate_slice(axis="x"), self.density_slice(axis="x")
+                    y, den_y = self.coordinate_slice(axis="y"), self.density_slice(axis="y")
+                    z, den_z = self.coordinate_slice(axis="z"), self.density_slice(axis="z")
+                    
+                    percentage_over = int(i / print_each)
+                    
+                    np.save(f"{output_dir}/densities/x_{percentage_over}", x)
+                    np.save(f"{output_dir}/densities/y_{percentage_over}", y)
+                    np.save(f"{output_dir}/densities/z_{percentage_over}", z)
 
-                np.save(f"{output_dir}/densities/den_x_{percentage_over}", den_x)
-                np.save(f"{output_dir}/densities/den_y_{percentage_over}", den_y)
-                np.save(f"{output_dir}/densities/den_z_{percentage_over}", den_z)
-                
+                    np.save(f"{output_dir}/densities/den_x_{percentage_over}", den_x)
+                    np.save(f"{output_dir}/densities/den_y_{percentage_over}", den_y)
+                    np.save(f"{output_dir}/densities/den_z_{percentage_over}", den_z)
+            
+            self.T2_operator()
             
 
                 
