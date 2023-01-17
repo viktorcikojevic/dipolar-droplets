@@ -429,7 +429,10 @@ class eGPE:
                time_prop="imag",
                verbose=False,
                print_each_percent=5,
-               output_root_dir=None):
+               output_root_dir=None,
+               save_density_slices=False,
+               save_x2=False,
+               ):
         """
         Evolution of the wavefunction.
         Args:
@@ -438,6 +441,7 @@ class eGPE:
             time_prop (str): propagation of time. "real" or "imag"
             verbose (bool): print additional information
             output_root_dir (str): path to the output directory
+            save_density_slices (bool): save density slices at each print_each_percent percent of the simulation
         Returns:
             psi (np.array): wavefunction at the end of the simulation
         """
@@ -445,6 +449,8 @@ class eGPE:
         # set number of time steps
         n_sim_steps = int(t_max / dt)
         print_each = int(n_sim_steps * print_each_percent/ 100)
+        if print_each == 0:
+            print_each = 1
         
         if output_root_dir is not None:
             output_dir = f'{output_root_dir}/snapshots_time_evolution_0'
@@ -463,6 +469,10 @@ class eGPE:
             if not os.path.exists(f"{output_dir}/densities"):
                 os.makedirs(f"{output_dir}/densities")
 
+            if save_x2:
+                # create a file to save the x2
+                x2_file = open(f"{output_dir}/x2.txt", "w")
+                
         # determine the timestep
         if time_prop == "real":
             dt = dt
@@ -494,21 +504,27 @@ class eGPE:
                     # flush
                     energy_file.flush()
                     
-                    # Save coordinate and its slices
-                    x, den_x = self.coordinate_slice(axis="x"), self.density_slice(axis="x")
-                    y, den_y = self.coordinate_slice(axis="y"), self.density_slice(axis="y")
-                    z, den_z = self.coordinate_slice(axis="z"), self.density_slice(axis="z")
-                    
-                    percentage_over = int(i / print_each)
-                    
-                    np.save(f"{output_dir}/densities/x_{percentage_over}", x)
-                    np.save(f"{output_dir}/densities/y_{percentage_over}", y)
-                    np.save(f"{output_dir}/densities/z_{percentage_over}", z)
+                    if save_density_slices:
+                        # Save coordinate and its slices
+                        x, den_x = self.coordinate_slice(axis="x"), self.density_slice(axis="x")
+                        y, den_y = self.coordinate_slice(axis="y"), self.density_slice(axis="y")
+                        z, den_z = self.coordinate_slice(axis="z"), self.density_slice(axis="z")
+                        
+                        percentage_over = int(i / print_each)
+                        
+                        np.save(f"{output_dir}/densities/x_{percentage_over}", x)
+                        np.save(f"{output_dir}/densities/y_{percentage_over}", y)
+                        np.save(f"{output_dir}/densities/z_{percentage_over}", z)
 
-                    np.save(f"{output_dir}/densities/den_x_{percentage_over}", den_x)
-                    np.save(f"{output_dir}/densities/den_y_{percentage_over}", den_y)
-                    np.save(f"{output_dir}/densities/den_z_{percentage_over}", den_z)
-            
+                        np.save(f"{output_dir}/densities/den_x_{percentage_over}", den_x)
+                        np.save(f"{output_dir}/densities/den_y_{percentage_over}", den_y)
+                        np.save(f"{output_dir}/densities/den_z_{percentage_over}", den_z)
+
+                    if save_x2:
+                        x2 = np.sum(self.den * self.x**2) / np.sum(self.den)
+                        # save x2 to x2_file
+                        x2_file.write(f'{i} {x2}\n')
+                    
             self.T2_operator()
             
 
