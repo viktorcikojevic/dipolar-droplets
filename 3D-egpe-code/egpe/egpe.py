@@ -523,7 +523,7 @@ class eGPE:
                     if save_x2:
                         x2 = np.sum(self.den * self.x**2) / np.sum(self.den)
                         # save x2 to x2_file
-                        x2_file.write(f'{i} {x2}\n')
+                        x2_file.write(f'{i * dt} {x2}\n')
                     
             self.T2_operator()
             
