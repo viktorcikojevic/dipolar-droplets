@@ -37,14 +37,14 @@ def local_minima(array2d):
             (array2d <= np.roll(array2d,  1, 1)) &
             (array2d <= np.roll(array2d, -1, 1)))
 
-def estimate_nc(alpha, beta, gamma, include_ho=True, based_on='energy', verbose=False):
+def estimate_nc(alpha, beta, gamma, include_ho=True, based_on='energy', n_particle_start=3*10**5, reduction_factor=0.99,verbose=False):
     # Critical atom number is the number of atoms for which the energy of a system crosses zero.
     # The energy of a system is given by the second element of the tuple returned by en_particles.
     # The first element of the tuple is the optimal x_0.
     # Implement the root-finding algorithm to find the critical atom number
     # The function should return the critical atom number and the optimal x_0 for that atom number
     # The function should also return the energy of the system for the critical atom number.
-    nparticles = 3*10**5
+    nparticles = n_particle_start
 
     
 
@@ -55,7 +55,7 @@ def estimate_nc(alpha, beta, gamma, include_ho=True, based_on='energy', verbose=
     # Run the code below if the based_on is 'energy'
     if based_on == 'energy':
         ng = 500
-        sr_range = np.linspace(4, 200, ng)
+        sr_range = np.linspace(4, 300, ng)
         sz_range = np.linspace(4, 2000, ng)
         # make meshgrid
         sr, sz = np.meshgrid(sr_range, sz_range)
@@ -90,7 +90,7 @@ def estimate_nc(alpha, beta, gamma, include_ho=True, based_on='energy', verbose=
             
             # if there exists local minimum, decrease the number of atoms. If not, break the loop
             if np.sum(local_min) > 0:
-                nparticles_new = nparticles * 0.9
+                nparticles_new = nparticles * reduction_factor
                 nparticles = nparticles_new
                 
                 # print the sr and sz values for the local minima
@@ -117,10 +117,10 @@ def estimate_nc(alpha, beta, gamma, include_ho=True, based_on='energy', verbose=
         return nc, np.min(en_0)
     
     
-def get_optimal_sr_sz(alpha, beta, gamma, nparticles):
+def get_optimal_sr_sz(alpha, beta, gamma, nparticles, sr_range=[3,200], sz_range=[4,3000]):
     ng = 500
-    sr_range = np.linspace(4, 200, ng)
-    sz_range = np.linspace(4, 3000, ng)
+    sr_range = np.linspace(sr_range[0], sr_range[1], ng)
+    sz_range = np.linspace(sz_range[0], sz_range[1], ng)
     # make meshgrid
     sr, sz = np.meshgrid(sr_range, sz_range)
 
