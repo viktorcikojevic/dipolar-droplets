@@ -13,8 +13,7 @@ These notebooks are conceptually ordered in the following way:
 - Notebook `beta-gamma-fit-vs-a_s.ipynb` contains the code for the fit of beta and gamma vs $a_s$. This is the final notebook where the plot of critical atom number is made. In this notebook, I compare the $N_c$ obtained from the fit of beta and gamma with the actual evaluations of $N_c$ from the `critical_atom_number.ipynb` notebook. 
 
 
-# Description of outputs
+# Folders
 
 - Folder [energies-qmc](./energies-qmc) contains the energies of the QMC calculations for the different atom numbers.
 - Folder [experimental-data](./experimental-data) contains the experimental data for the critical atom number.
-- Folder [plots](./plots) contains the plots of the project made by the notebooks
