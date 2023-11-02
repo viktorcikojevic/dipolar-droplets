@@ -1,4 +1,0 @@
-Reproduce Fig. 1 
-https://arxiv.org/abs/2102.05555
-
-You should start with a Gaussian + noise, because eGPE preserves parity symmetry.
